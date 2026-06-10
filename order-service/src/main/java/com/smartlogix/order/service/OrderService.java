@@ -101,6 +101,42 @@ public class OrderService {
         return toResponse(order);
     }
 
+    // --- NUEVO MÉTODO PARA ACTUALIZAR (PUT) ---
+    public OrderResponse updateOrder(String orderNumber, CreateOrderRequest request) {
+        PurchaseOrder existingOrder = repository.findByOrderNumber(orderNumber)
+                .orElseThrow(() -> new OrderNotFoundException("No existe la orden " + orderNumber));
+
+        // Actualizamos los datos del cliente
+        existingOrder.setCustomerName(request.customerName().trim());
+        existingOrder.setCustomerEmail(request.customerEmail().trim().toLowerCase());
+        existingOrder.setShippingAddress(request.shippingAddress().trim());
+        
+        // Limpiamos las líneas anteriores y agregamos las nuevas
+        existingOrder.getLines().clear();
+        for (OrderLineRequest lineRequest : request.lines()) {
+            OrderLine line = new OrderLine();
+            line.setSku(lineRequest.sku().trim().toUpperCase());
+            line.setQuantity(lineRequest.quantity());
+            line.setUnitPrice(lineRequest.unitPrice());
+            existingOrder.addLine(line);
+        }
+        
+        existingOrder.setTotalAmount(calculateTotal(request.lines()));
+
+        repository.save(existingOrder);
+        return toResponse(existingOrder);
+    }
+
+    // --- NUEVO MÉTODO PARA ELIMINAR (DELETE) ---
+    public void deleteOrder(String orderNumber) {
+        PurchaseOrder order = repository.findByOrderNumber(orderNumber)
+                .orElseThrow(() -> new OrderNotFoundException("No existe la orden " + orderNumber));
+        
+        // Si hay lógica adicional como liberar inventario antes de borrar, iría aquí.
+        // Por ahora, procedemos a borrar la orden de la base de datos.
+        repository.delete(order);
+    }
+
     private PurchaseOrder buildOrder(CreateOrderRequest request) {
         PurchaseOrder order = new PurchaseOrder();
         order.setCustomerName(request.customerName().trim());
