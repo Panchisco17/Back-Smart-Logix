@@ -1,0 +1,8 @@
+# Usa contexto limpio para builds de Docker
+**/target
+**/.idea
+**/.vscode
+.git
+.gitignore
+README.md
+HELP.md

@@ -1,0 +1,42 @@
+server:
+  port: 8084
+
+spring:
+  application:
+    name: auth-service
+  datasource:
+    url: jdbc:h2:mem:authdb;DB_CLOSE_DELAY=-1;DB_CLOSE_ON_EXIT=FALSE
+    driverClassName: org.h2.Driver
+    username: sa
+    password:
+  h2:
+    console:
+      enabled: false
+      path: /h2-console
+  jpa:
+    hibernate:
+      ddl-auto: update
+    show-sql: false
+
+# Configuración JWT
+jwt:
+  secret: ${JWT_SECRET:SmartLogixSuperSecretKeyForJWT2024PlatformMicroservicesArchitecture!!}
+  expiration-ms: ${JWT_EXPIRATION_MS:3600000}   # 1 hora
+
+smartlogix:
+  seed:
+    enabled: ${SMARTLOGIX_SEED_ENABLED:true}
+    admin-password: ${SMARTLOGIX_SEED_ADMIN_PASSWORD:admin123}
+    user-password: ${SMARTLOGIX_SEED_USER_PASSWORD:user123}
+    warehouse-password: ${SMARTLOGIX_SEED_WAREHOUSE_PASSWORD:bodega123}
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info
+
+eureka:
+  client:
+    service-url:
+      defaultZone: http://localhost:8761/eureka/
