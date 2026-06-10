@@ -34,41 +34,97 @@ public class ShipmentService {
     public ShipmentResponse createShipment(CreateShipmentRequest request) {
         String destinationAddress = request.destinationAddress().trim();
         String normalizedAddress = destinationAddress.toLowerCase(Locale.ROOT);
-        ShipmentPlanFactory planFactory = planFactoryResolver.resolve(normalizedAddress);
-        ShipmentPlan shipmentPlan = planFactory.createPlan(normalizedAddress);
+
+        ShipmentPlanFactory planFactory =
+                planFactoryResolver.resolve(normalizedAddress);
+
+        ShipmentPlan shipmentPlan =
+                planFactory.createPlan(normalizedAddress);
 
         Shipment shipment = new Shipment();
-        shipment.setOrderNumber(request.orderNumber().trim().toUpperCase());
+
+        shipment.setOrderNumber(
+                request.orderNumber().trim().toUpperCase()
+        );
+
         shipment.setDestinationAddress(destinationAddress);
+
         shipment.setTotalUnits(request.totalUnits());
+
         shipment.setCarrier(shipmentPlan.carrier());
+
         shipment.setRouteCode(shipmentPlan.routeCode());
-        shipment.setEstimatedDeliveryDate(LocalDate.now().plusDays(shipmentPlan.estimatedDeliveryDays()));
+
+        shipment.setEstimatedDeliveryDate(
+                LocalDate.now().plusDays(
+                        shipmentPlan.estimatedDeliveryDays()
+                )
+        );
+
         shipment.setStatus(ShipmentStatus.PLANNED);
-        shipment.setTrackingCode("SLX-" + UUID.randomUUID().toString().substring(0, 10).toUpperCase());
+
+        shipment.setTrackingCode(
+                "SLX-" +
+                UUID.randomUUID()
+                        .toString()
+                        .substring(0, 10)
+                        .toUpperCase()
+        );
 
         return toResponse(repository.save(shipment));
     }
 
     @Transactional(readOnly = true)
     public List<ShipmentResponse> getShipments() {
-        return repository.findAll().stream()
+        return repository.findAll()
+                .stream()
                 .map(this::toResponse)
                 .toList();
     }
 
     @Transactional(readOnly = true)
     public ShipmentResponse getByTrackingCode(String trackingCode) {
-        Shipment shipment = repository.findByTrackingCode(trackingCode.trim().toUpperCase())
-                .orElseThrow(() -> new ShipmentNotFoundException("No existe el envio " + trackingCode));
+
+        Shipment shipment = repository.findByTrackingCode(
+                trackingCode.trim().toUpperCase()
+        ).orElseThrow(() ->
+                new ShipmentNotFoundException(
+                        "No existe el envio " + trackingCode
+                )
+        );
+
         return toResponse(shipment);
     }
 
-    public ShipmentResponse updateStatus(String trackingCode, ShipmentStatus status) {
-        Shipment shipment = repository.findByTrackingCode(trackingCode.trim().toUpperCase())
-                .orElseThrow(() -> new ShipmentNotFoundException("No existe el envio " + trackingCode));
+    public ShipmentResponse updateStatus(
+            String trackingCode,
+            ShipmentStatus status
+    ) {
+
+        Shipment shipment = repository.findByTrackingCode(
+                trackingCode.trim().toUpperCase()
+        ).orElseThrow(() ->
+                new ShipmentNotFoundException(
+                        "No existe el envio " + trackingCode
+                )
+        );
+
         shipment.setStatus(status);
+
         return toResponse(repository.save(shipment));
+    }
+
+    public void deleteShipment(String trackingCode) {
+
+        Shipment shipment = repository.findByTrackingCode(
+                trackingCode.trim().toUpperCase()
+        ).orElseThrow(() ->
+                new ShipmentNotFoundException(
+                        "No existe el envio " + trackingCode
+                )
+        );
+
+        repository.delete(shipment);
     }
 
     private ShipmentResponse toResponse(Shipment shipment) {
