@@ -171,7 +171,6 @@ public class OrderService {
             try {
                 inventoryClient.release(line.getSku(), line.getQuantity());
             } catch (Exception ignored) {
-                // Si la liberacion falla, la orden queda rechazada y se audita por log externo.
             }
         }
     }
