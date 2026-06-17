@@ -8,6 +8,7 @@ public record CreateInventoryItemRequest(
         @NotBlank String productName,
         @NotBlank String warehouseCode,
         @Min(0) int initialQuantity,
-        @Min(0) int reorderLevel
+        @Min(0) int reorderLevel,
+        @Min(0) Double price
 ) {
 }

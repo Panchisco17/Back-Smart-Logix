@@ -16,13 +16,13 @@ public class InventorySeedConfig {
                 return;
             }
 
-            repository.save(buildItem("SKU-1001", "Teclado Mecanico RGB", "WH-SCL-01", 120, 20));
-            repository.save(buildItem("SKU-2001", "Mouse Inalambrico", "WH-SCL-01", 200, 30));
-            repository.save(buildItem("SKU-3001", "Monitor 24 Pulgadas", "WH-VAP-02", 45, 10));
+            repository.save(buildItem("SKU-1001", "Teclado Mecanico RGB", "WH-SCL-01", 120, 20, 18990.00));
+            repository.save(buildItem("SKU-2001", "Mouse Inalambrico", "WH-SCL-01", 200, 30, 11990.00));
+            repository.save(buildItem("SKU-3001", "Monitor 24 Pulgadas", "WH-VAP-02", 45, 10, 124990.00));
         };
     }
 
-    private InventoryItem buildItem(String sku, String name, String warehouse, int available, int reorderLevel) {
+    private InventoryItem buildItem(String sku, String name, String warehouse, int available, int reorderLevel, Double price) {
         InventoryItem item = new InventoryItem();
         item.setSku(sku);
         item.setProductName(name);
@@ -30,6 +30,7 @@ public class InventorySeedConfig {
         item.setAvailableQuantity(available);
         item.setReservedQuantity(0);
         item.setReorderLevel(reorderLevel);
+        item.setPrice(price);
         return item;
     }
 }

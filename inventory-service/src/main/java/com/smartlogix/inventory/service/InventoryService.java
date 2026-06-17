@@ -33,6 +33,7 @@ public class InventoryService {
         item.setAvailableQuantity(request.initialQuantity());
         item.setReservedQuantity(0);
         item.setReorderLevel(request.reorderLevel());
+        item.setPrice(request.price());
 
         return toResponse(repository.save(item));
     }
@@ -121,7 +122,8 @@ public class InventoryService {
                 item.getAvailableQuantity(),
                 item.getReservedQuantity(),
                 item.getReorderLevel(),
-                item.getUpdatedAt()
+                item.getPrice() != null ? item.getPrice() : 0.0, 
+                item.getUpdatedAt()                              
         );
     }
 }
