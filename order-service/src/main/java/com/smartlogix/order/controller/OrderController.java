@@ -13,6 +13,7 @@ import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam; 
 import org.springframework.web.bind.annotation.RestController;
 
 @RestController
@@ -40,20 +41,23 @@ public class OrderController {
         return orderService.getOrderByNumber(orderNumber);
     }
 
-    // --- MÉTODOS AGREGADOS PARA SOPORTAR EL FRONTEND ---
+    @PutMapping("/{orderNumber}/status")
+    public ResponseEntity<OrderResponse> updateOrderStatus(
+            @PathVariable String orderNumber,
+            @RequestParam String status) {
+        return ResponseEntity.ok(orderService.updateOrderStatus(orderNumber, status));
+    }
 
     @PutMapping("/{orderNumber}")
     public OrderResponse updateOrder(
             @PathVariable String orderNumber, 
             @Valid @RequestBody CreateOrderRequest request) { 
-        // Asumiendo que usas el mismo DTO para actualizar, o cámbialo a UpdateOrderRequest si tienes uno
         return orderService.updateOrder(orderNumber, request);
     }
 
     @DeleteMapping("/{orderNumber}")
     public ResponseEntity<Void> deleteOrder(@PathVariable String orderNumber) {
         orderService.deleteOrder(orderNumber);
-        // Retornamos un 204 No Content que es el estándar HTTP para una eliminación exitosa
         return ResponseEntity.noContent().build(); 
     }
 }

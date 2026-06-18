@@ -67,21 +67,9 @@ public class OrderService {
             }
         }
 
+        // Dejamos la orden como APROBADA (Lista para ser procesada en bodega).
+        // Quitamos la automatización del envío para que se haga manualmente después.
         order.setStatus(OrderStatus.APPROVED);
-
-        ShipmentResponse shipmentResponse = shipmentClient.requestShipment(
-                new ShipmentRequest(order.getOrderNumber(), order.getShippingAddress(), totalUnits(order))
-        );
-
-        if (shipmentResponse == null || shipmentResponse.trackingCode() == null) {
-            order.setStatus(OrderStatus.FAILED);
-            order.setRejectionReason("Servicio de envios no disponible. Asignacion manual requerida.");
-            repository.save(order);
-            return toResponse(order);
-        }
-
-        order.setStatus(OrderStatus.SHIPMENT_REQUESTED);
-        order.setTrackingCode(shipmentResponse.trackingCode());
         repository.save(order);
 
         return toResponse(order);
@@ -101,17 +89,49 @@ public class OrderService {
         return toResponse(order);
     }
 
-    // --- NUEVO MÉTODO PARA ACTUALIZAR (PUT) ---
+    // --- NUEVO MÉTODO PARA PROCESAR EL ESTADO Y EL ENVÍO ---
+    public OrderResponse updateOrderStatus(String orderNumber, String statusString) {
+        PurchaseOrder order = repository.findByOrderNumber(orderNumber)
+                .orElseThrow(() -> new OrderNotFoundException("No existe la orden " + orderNumber));
+
+        // Convertimos el string que llega desde React a tu Enum OrderStatus
+        OrderStatus nextStatus;
+        try {
+            nextStatus = OrderStatus.valueOf(statusString.toUpperCase());
+        } catch (IllegalArgumentException e) {
+            throw new RuntimeException("Estado no válido: " + statusString);
+        }
+
+        // Si el Administrador decide Despachar la orden (Pasarla a SHIPMENT_REQUESTED)
+        if (nextStatus == OrderStatus.SHIPMENT_REQUESTED) {
+            // Utilizamos tu Feign Client para comunicarnos con el microservicio de envíos
+            ShipmentResponse shipmentResponse = shipmentClient.requestShipment(
+                    new ShipmentRequest(order.getOrderNumber(), order.getShippingAddress(), totalUnits(order))
+            );
+
+            if (shipmentResponse == null || shipmentResponse.trackingCode() == null) {
+                throw new RuntimeException("Servicio de envíos no disponible o falló la creación de la guía.");
+            }
+
+            // Si es exitoso, guardamos el tracking y el nuevo estado
+            order.setTrackingCode(shipmentResponse.trackingCode());
+            order.setStatus(OrderStatus.SHIPMENT_REQUESTED);
+        } else {
+            // Si es otro estado (ej: REJECTED manual), solo lo actualizamos
+            order.setStatus(nextStatus);
+        }
+
+        return toResponse(repository.save(order));
+    }
+
     public OrderResponse updateOrder(String orderNumber, CreateOrderRequest request) {
         PurchaseOrder existingOrder = repository.findByOrderNumber(orderNumber)
                 .orElseThrow(() -> new OrderNotFoundException("No existe la orden " + orderNumber));
 
-        // Actualizamos los datos del cliente
         existingOrder.setCustomerName(request.customerName().trim());
         existingOrder.setCustomerEmail(request.customerEmail().trim().toLowerCase());
         existingOrder.setShippingAddress(request.shippingAddress().trim());
         
-        // Limpiamos las líneas anteriores y agregamos las nuevas
         existingOrder.getLines().clear();
         for (OrderLineRequest lineRequest : request.lines()) {
             OrderLine line = new OrderLine();
@@ -127,13 +147,10 @@ public class OrderService {
         return toResponse(existingOrder);
     }
 
-    // --- NUEVO MÉTODO PARA ELIMINAR (DELETE) ---
     public void deleteOrder(String orderNumber) {
         PurchaseOrder order = repository.findByOrderNumber(orderNumber)
                 .orElseThrow(() -> new OrderNotFoundException("No existe la orden " + orderNumber));
         
-        // Si hay lógica adicional como liberar inventario antes de borrar, iría aquí.
-        // Por ahora, procedemos a borrar la orden de la base de datos.
         repository.delete(order);
     }
 
