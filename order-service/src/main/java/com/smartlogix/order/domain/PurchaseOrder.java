@@ -29,6 +29,9 @@ public class PurchaseOrder {
     @Column(nullable = false, unique = true, length = 50)
     private String orderNumber;
 
+    @Column(length = 100)
+    private String username;
+
     @Column(nullable = false, length = 120)
     private String customerName;
 
@@ -71,6 +74,14 @@ public class PurchaseOrder {
 
     public String getOrderNumber() {
         return orderNumber;
+    }
+
+    public String getUsername() {
+        return username;
+    }
+
+    public void setUsername(String username) {
+        this.username = username;
     }
 
     public String getCustomerName() {

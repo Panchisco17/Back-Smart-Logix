@@ -18,6 +18,7 @@ import com.smartlogix.order.repository.PurchaseOrderRepository;
 import java.math.BigDecimal;
 import java.util.ArrayList;
 import java.util.List;
+import org.springframework.security.core.context.SecurityContextHolder; // <-- Importación para leer el token
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -67,8 +68,6 @@ public class OrderService {
             }
         }
 
-        // Dejamos la orden como APROBADA (Lista para ser procesada en bodega).
-        // Quitamos la automatización del envío para que se haga manualmente después.
         order.setStatus(OrderStatus.APPROVED);
         repository.save(order);
 
@@ -89,12 +88,10 @@ public class OrderService {
         return toResponse(order);
     }
 
-    // --- NUEVO MÉTODO PARA PROCESAR EL ESTADO Y EL ENVÍO ---
     public OrderResponse updateOrderStatus(String orderNumber, String statusString) {
         PurchaseOrder order = repository.findByOrderNumber(orderNumber)
                 .orElseThrow(() -> new OrderNotFoundException("No existe la orden " + orderNumber));
 
-        // Convertimos el string que llega desde React a tu Enum OrderStatus
         OrderStatus nextStatus;
         try {
             nextStatus = OrderStatus.valueOf(statusString.toUpperCase());
@@ -102,9 +99,7 @@ public class OrderService {
             throw new RuntimeException("Estado no válido: " + statusString);
         }
 
-        // Si el Administrador decide Despachar la orden (Pasarla a SHIPMENT_REQUESTED)
         if (nextStatus == OrderStatus.SHIPMENT_REQUESTED) {
-            // Utilizamos tu Feign Client para comunicarnos con el microservicio de envíos
             ShipmentResponse shipmentResponse = shipmentClient.requestShipment(
                     new ShipmentRequest(order.getOrderNumber(), order.getShippingAddress(), totalUnits(order))
             );
@@ -113,11 +108,9 @@ public class OrderService {
                 throw new RuntimeException("Servicio de envíos no disponible o falló la creación de la guía.");
             }
 
-            // Si es exitoso, guardamos el tracking y el nuevo estado
             order.setTrackingCode(shipmentResponse.trackingCode());
             order.setStatus(OrderStatus.SHIPMENT_REQUESTED);
         } else {
-            // Si es otro estado (ej: REJECTED manual), solo lo actualizamos
             order.setStatus(nextStatus);
         }
 
@@ -156,6 +149,11 @@ public class OrderService {
 
     private PurchaseOrder buildOrder(CreateOrderRequest request) {
         PurchaseOrder order = new PurchaseOrder();
+        
+        // --- AQUÍ ASIGNAMOS EL USUARIO DE LA SESIÓN ---
+        String currentUsername = SecurityContextHolder.getContext().getAuthentication().getName();
+        order.setUsername(currentUsername);
+        
         order.setCustomerName(request.customerName().trim());
         order.setCustomerEmail(request.customerEmail().trim().toLowerCase());
         order.setShippingAddress(request.shippingAddress().trim());
@@ -204,6 +202,10 @@ public class OrderService {
 
         return new OrderResponse(
                 order.getOrderNumber(),
+                order.getUsername(),         
+                order.getCustomerName(),
+                order.getCustomerEmail(),
+                order.getShippingAddress(),
                 order.getStatus(),
                 order.getTotalAmount(),
                 order.getTrackingCode(),
