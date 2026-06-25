@@ -102,4 +102,11 @@ public class AuthService {
 
         return new AuthResponse(token, username, role, jwtProvider.getExpirationMs());
     }
+    /**
+     * Obtiene la lista de todos los usuarios registrados.
+     */
+    @Transactional(readOnly = true)
+    public java.util.List<UserEntity> getAllUsers() {
+        return userRepository.findAll();
+    }
 }

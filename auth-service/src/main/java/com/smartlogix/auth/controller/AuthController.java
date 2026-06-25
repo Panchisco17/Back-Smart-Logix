@@ -55,4 +55,12 @@ public class AuthController {
         }
         return token;
     }
+    /**
+     *
+     * GET /api/auth/users — Obtiene todos los usuarios.
+     */
+    @GetMapping("/users")
+    public java.util.List<com.smartlogix.auth.domain.UserEntity> getAllUsers() {
+        return authService.getAllUsers();
+    }
 }
