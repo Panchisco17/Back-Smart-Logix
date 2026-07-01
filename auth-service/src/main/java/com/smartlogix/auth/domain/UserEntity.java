@@ -29,6 +29,10 @@ public class UserEntity {
 
     @Column(nullable = false)
     private boolean enabled = true;
+    
+    // <-- NUEVO CAMPO: Guarda el código generado al registrarse -->
+    @Column(name = "discount_code", length = 20)
+    private String discountCode;
 
     @Column(name = "created_at", updatable = false)
     private LocalDateTime createdAt;
@@ -66,6 +70,9 @@ public class UserEntity {
 
     public boolean isEnabled() { return enabled; }
     public void setEnabled(boolean enabled) { this.enabled = enabled; }
+
+    public String getDiscountCode() { return discountCode; }
+    public void setDiscountCode(String discountCode) { this.discountCode = discountCode; }
 
     public LocalDateTime getCreatedAt() { return createdAt; }
     public LocalDateTime getUpdatedAt() { return updatedAt; }
