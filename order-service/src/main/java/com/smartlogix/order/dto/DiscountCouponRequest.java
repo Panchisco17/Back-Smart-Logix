@@ -10,7 +10,7 @@ public record DiscountCouponRequest(
         @NotBlank String code,
         String description,
         @NotNull DiscountType type,
-        BigDecimal value,
+        BigDecimal amount,
         BigDecimal minSubtotal,
         String requiredEmailDomain,
         boolean firstPurchaseOnly,

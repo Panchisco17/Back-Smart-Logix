@@ -29,13 +29,13 @@ public class DiscountCouponSeedConfig {
         };
     }
 
-    private DiscountCoupon build(String code, String description, DiscountType type, BigDecimal value,
+    private DiscountCoupon build(String code, String description, DiscountType type, BigDecimal amount,
             BigDecimal minSubtotal, String requiredEmailDomain, boolean firstPurchaseOnly) {
         DiscountCoupon coupon = new DiscountCoupon();
         coupon.setCode(code);
         coupon.setDescription(description);
         coupon.setType(type);
-        coupon.setValue(value);
+        coupon.setAmount(amount);
         coupon.setMinSubtotal(minSubtotal);
         coupon.setRequiredEmailDomain(requiredEmailDomain);
         coupon.setFirstPurchaseOnly(firstPurchaseOnly);

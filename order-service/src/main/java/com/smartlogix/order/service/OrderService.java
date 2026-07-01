@@ -275,13 +275,13 @@ public class OrderService {
     private BigDecimal applyCoupon(DiscountCoupon coupon, CreateOrderRequest request, BigDecimal baseSubtotal) {
         return switch (coupon.getType()) {
             case PERCENTAGE -> {
-                BigDecimal percentage = coupon.getValue() != null ? coupon.getValue() : BigDecimal.ZERO;
+                BigDecimal percentage = coupon.getAmount() != null ? coupon.getAmount() : BigDecimal.ZERO;
                 BigDecimal factor = BigDecimal.ONE.subtract(
                         percentage.divide(new BigDecimal("100"), 4, RoundingMode.HALF_UP));
                 yield baseSubtotal.multiply(factor);
             }
             case FIXED_AMOUNT -> {
-                BigDecimal amount = coupon.getValue() != null ? coupon.getValue() : BigDecimal.ZERO;
+                BigDecimal amount = coupon.getAmount() != null ? coupon.getAmount() : BigDecimal.ZERO;
                 yield baseSubtotal.subtract(amount);
             }
             case TWO_FOR_ONE -> {

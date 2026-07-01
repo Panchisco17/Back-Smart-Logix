@@ -199,7 +199,6 @@ public class PaymentService {
                                     <img src="/assets/redcompra-logo.jpg" alt="RedCompra" />
                                 </div>
 
-                                <p class="hint">Simulación educativa: cualquier tarjeta con datos válidos aprueba el pago. Una tarjeta que comience con "4000" simula un rechazo (fondos insuficientes).</p>
                             </div>
                         </div>
                         <p class="footer-note">🔒 Transacción respaldada por Transbank. Revisa las <span class="policy">Políticas de Seguridad y Privacidad</span>.</p>

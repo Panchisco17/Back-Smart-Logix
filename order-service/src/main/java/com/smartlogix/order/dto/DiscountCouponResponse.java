@@ -9,7 +9,7 @@ public record DiscountCouponResponse(
         String code,
         String description,
         DiscountType type,
-        BigDecimal value,
+        BigDecimal amount,
         BigDecimal minSubtotal,
         String requiredEmailDomain,
         boolean firstPurchaseOnly,

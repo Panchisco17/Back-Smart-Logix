@@ -31,8 +31,9 @@ public class DiscountCoupon {
     private DiscountType type;
 
     // Porcentaje (ej. 25 = 25%) o monto fijo en CLP, según el tipo. No aplica para TWO_FOR_ONE.
+    // Nota: se llama "amount" y no "value" porque VALUE es palabra reservada en H2.
     @Column(precision = 14, scale = 2)
-    private BigDecimal value;
+    private BigDecimal amount;
 
     // Subtotal mínimo del carrito para que el cupón sea válido (opcional).
     @Column(precision = 14, scale = 2)
@@ -88,12 +89,12 @@ public class DiscountCoupon {
         this.type = type;
     }
 
-    public BigDecimal getValue() {
-        return value;
+    public BigDecimal getAmount() {
+        return amount;
     }
 
-    public void setValue(BigDecimal value) {
-        this.value = value;
+    public void setAmount(BigDecimal amount) {
+        this.amount = amount;
     }
 
     public BigDecimal getMinSubtotal() {

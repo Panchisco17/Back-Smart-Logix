@@ -67,7 +67,7 @@ public class DiscountCouponService {
     private void applyRequest(DiscountCoupon coupon, DiscountCouponRequest request) {
         coupon.setDescription(request.description() != null ? request.description().trim() : null);
         coupon.setType(request.type());
-        coupon.setValue(request.value());
+        coupon.setAmount(request.amount());
         coupon.setMinSubtotal(request.minSubtotal());
         coupon.setRequiredEmailDomain(
                 request.requiredEmailDomain() != null && !request.requiredEmailDomain().isBlank()
@@ -90,7 +90,7 @@ public class DiscountCouponService {
                 coupon.getCode(),
                 coupon.getDescription(),
                 coupon.getType(),
-                coupon.getValue(),
+                coupon.getAmount(),
                 coupon.getMinSubtotal(),
                 coupon.getRequiredEmailDomain(),
                 coupon.isFirstPurchaseOnly(),
