@@ -22,6 +22,9 @@ public class OrderLine {
     @Column(nullable = false, length = 60)
     private String sku;
 
+    @Column(length = 120)
+    private String productName;
+
     @Column(nullable = false)
     private int quantity;
 
@@ -42,6 +45,14 @@ public class OrderLine {
 
     public void setSku(String sku) {
         this.sku = sku;
+    }
+
+    public String getProductName() {
+        return productName;
+    }
+
+    public void setProductName(String productName) {
+        this.productName = productName;
     }
 
     public int getQuantity() {

@@ -8,6 +8,7 @@ import java.math.BigDecimal;
 
 public record OrderLineRequest(
         @NotBlank String sku,
+        String productName,
         @Min(1) int quantity,
         @NotNull @DecimalMin("0.01") BigDecimal unitPrice
 ) {

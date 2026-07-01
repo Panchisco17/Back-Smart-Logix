@@ -1,0 +1,28 @@
+server:
+  port: 8085
+
+spring:
+  application:
+    name: payment-service
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info
+
+jwt:
+  secret: ${JWT_SECRET:SmartLogixSuperSecretKeyForJWT2024PlatformMicroservicesArchitecture!!}
+
+eureka:
+  client:
+    service-url:
+      defaultZone: http://localhost:8761/eureka/
+
+app:
+  gateway:
+    base-url: http://localhost:8080
+  frontend:
+    success-url: http://localhost:5173/?payment=success#/my-orders
+    failure-url: http://localhost:5173/?payment=failed#/products
+    pending-url: http://localhost:5173/?payment=pending#/my-orders

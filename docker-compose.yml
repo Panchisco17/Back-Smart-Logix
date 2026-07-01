@@ -102,6 +102,29 @@ services:
     expose:
       - "8082"
 
+  payment-service:
+    build:
+      context: .
+      dockerfile: payment-service/Dockerfile
+    image: smartlogix/payment-service:latest
+    depends_on:
+      discovery-service:
+        condition: service_healthy
+      order-service:
+        condition: service_healthy
+    restart: unless-stopped
+    environment:
+      - EUREKA_CLIENT_SERVICEURL_DEFAULTZONE=http://discovery-service:8761/eureka/
+      - JWT_SECRET=${JWT_SECRET:-SmartLogixSuperSecretKeyForJWT2024PlatformMicroservicesArchitecture!!}
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://localhost:8085/actuator/health"]
+      interval: 15s
+      timeout: 5s
+      retries: 10
+      start_period: 35s
+    expose:
+      - "8085"
+
   api-gateway:
     build:
       context: .
@@ -115,6 +138,8 @@ services:
       inventory-service:
         condition: service_healthy
       order-service:
+        condition: service_healthy
+      payment-service:
         condition: service_healthy
       shipment-service:
         condition: service_healthy
