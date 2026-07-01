@@ -10,6 +10,7 @@ import com.smartlogix.auth.strategy.AuthStrategyResolver;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import java.util.UUID; // <-- Importación necesaria para generar el código único
 
 /**
  * Servicio de autenticación que orquesta el registro y el login.
@@ -53,24 +54,32 @@ public class AuthService {
         user.setRole(Role.ROLE_USER);
         user.setEnabled(true);
 
+        // --- LÓGICA DE GENERACIÓN DE CÓDIGO DE DESCUENTO ---
+        String generatedCode = null;
+        if (user.getEmail().endsWith("@duocuc.cl")) {
+            // Genera un código único tipo "DUOC25-XYZ123"
+            generatedCode = "DUOC25-" + UUID.randomUUID().toString().substring(0, 6).toUpperCase();
+            user.setDiscountCode(generatedCode);
+        }
+
         userRepository.save(user);
 
         return new RegisterResponse(
                 user.getUsername(),
                 user.getEmail(),
                 user.getRole().name(),
-                "Usuario registrado exitosamente."
+                generatedCode, // <-- Se envía el código generado en la respuesta
+                generatedCode != null 
+                    ? "¡Usuario registrado exitosamente! Tienes un código de 25% de descuento: " + generatedCode 
+                    : "Usuario registrado exitosamente."
         );
     }
 
     /**
      * Autentica al usuario usando el Strategy Pattern.
-     * El AuthStrategyResolver selecciona automáticamente la estrategia
-     * correcta (por username o por email) según la credencial.
      */
     public AuthResponse login(LoginRequest request) {
         try {
-            // Strategy Pattern: resuelve y ejecuta la estrategia adecuada
             UserEntity user = strategyResolver
                     .resolve(request.credential())
                     .authenticate(request.credential(), request.password());
@@ -102,6 +111,7 @@ public class AuthService {
 
         return new AuthResponse(token, username, role, jwtProvider.getExpirationMs());
     }
+
     /**
      * Obtiene la lista de todos los usuarios registrados.
      */

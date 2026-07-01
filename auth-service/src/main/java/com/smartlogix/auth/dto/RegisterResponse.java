@@ -7,5 +7,6 @@ public record RegisterResponse(
         String username,
         String email,
         String role,
+        String discountCode, // <-- Nuevo campo devuelto al frontend
         String message
 ) {}
