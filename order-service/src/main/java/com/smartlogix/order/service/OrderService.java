@@ -1,12 +1,5 @@
 package com.smartlogix.order.service;
 
-<<<<<<< HEAD
-import com.mercadopago.MercadoPagoConfig;
-import com.mercadopago.client.preference.PreferenceBackUrlsRequest;
-import com.mercadopago.client.preference.PreferenceClient;
-import com.mercadopago.client.preference.PreferenceItemRequest;
-import com.mercadopago.client.preference.PreferenceRequest;
-import com.mercadopago.resources.preference.Preference;
 import com.smartlogix.order.client.InventoryAvailabilityResponse;
 import com.smartlogix.order.client.InventoryClient;
 import com.smartlogix.order.client.InventoryClientException;
@@ -28,20 +21,9 @@ import java.util.List;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
-=======
-import com.smartlogix.order.client.*;
-import com.smartlogix.order.domain.*;
-import com.smartlogix.order.dto.*;
-import com.smartlogix.order.exception.*;
-import com.smartlogix.order.repository.PurchaseOrderRepository;
->>>>>>> 46c7468a155f9b5b4b4e2143b720421e3a15402c
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
-
-import java.math.BigDecimal;
-import java.util.ArrayList;
-import java.util.List;
 
 @Service
 @Transactional
@@ -53,24 +35,19 @@ public class OrderService {
     private final InventoryClient inventoryClient;
     private final ShipmentClient shipmentClient;
 
-   
-    @Value("${mercadopago.access-token}") --> se pasa el token 
-    private String mercadoPagoToken;
+    @Value("${app.gateway.base-url}")
+    private String gatewayBaseUrl;
 
     public OrderService(
             PurchaseOrderRepository repository,
             InventoryClient inventoryClient,
             ShipmentClient shipmentClient
     ) {
-=======
-    public OrderService(PurchaseOrderRepository repository, InventoryClient inventoryClient, ShipmentClient shipmentClient) {
->>>>>>> 46c7468a155f9b5b4b4e2143b720421e3a15402c
         this.repository = repository;
         this.inventoryClient = inventoryClient;
         this.shipmentClient = shipmentClient;
     }
 
-<<<<<<< HEAD
     public OrderResponse createOrder(CreateOrderRequest request) {
         PurchaseOrder order = buildOrder(request);
         repository.save(order);
@@ -141,30 +118,18 @@ public class OrderService {
         return repository.findAll().stream()
                 .map(order -> toResponse(order, null))
                 .toList();
-=======
-    // --- MÉTODOS QUE EL CONTROLADOR NECESITA ---
-
-    @Transactional(readOnly = true)
-    public List<OrderResponse> getOrders() {
-        return repository.findAll().stream().map(this::toResponse).toList();
->>>>>>> 46c7468a155f9b5b4b4e2143b720421e3a15402c
     }
 
     @Transactional(readOnly = true)
     public OrderResponse getOrderByNumber(String orderNumber) {
-        return repository.findByOrderNumber(orderNumber)
-                .map(this::toResponse)
+        PurchaseOrder order = repository.findByOrderNumber(orderNumber)
                 .orElseThrow(() -> new OrderNotFoundException("No existe la orden " + orderNumber));
-<<<<<<< HEAD
         return toResponse(order, null);
-=======
->>>>>>> 46c7468a155f9b5b4b4e2143b720421e3a15402c
     }
 
     public OrderResponse updateOrderStatus(String orderNumber, String statusString) {
         PurchaseOrder order = repository.findByOrderNumber(orderNumber)
                 .orElseThrow(() -> new OrderNotFoundException("No existe la orden " + orderNumber));
-<<<<<<< HEAD
 
         OrderStatus nextStatus;
         try {
@@ -198,7 +163,8 @@ public class OrderService {
         existingOrder.setCustomerName(request.customerName().trim());
         existingOrder.setCustomerEmail(request.customerEmail().trim().toLowerCase());
         existingOrder.setShippingAddress(request.shippingAddress().trim());
-        
+        existingOrder.setDiscountCode(request.discountCode());
+
         existingOrder.getLines().clear();
         for (OrderLineRequest lineRequest : request.lines()) {
             OrderLine line = new OrderLine();
@@ -208,77 +174,32 @@ public class OrderService {
             line.setUnitPrice(lineRequest.unitPrice());
             existingOrder.addLine(line);
         }
-        
-        existingOrder.setTotalAmount(calculateTotal(request.lines()));
+
+        existingOrder.setTotalAmount(calculateTotalWithDiscounts(request));
 
         repository.save(existingOrder);
         return toResponse(existingOrder, null);
-=======
-        
-        OrderStatus nextStatus = OrderStatus.valueOf(statusString.toUpperCase());
-        order.setStatus(nextStatus);
-        return toResponse(repository.save(order));
->>>>>>> 46c7468a155f9b5b4b4e2143b720421e3a15402c
     }
 
     public void deleteOrder(String orderNumber) {
         PurchaseOrder order = repository.findByOrderNumber(orderNumber)
                 .orElseThrow(() -> new OrderNotFoundException("No existe la orden " + orderNumber));
+
         repository.delete(order);
-    }
-
-    public OrderResponse createOrder(CreateOrderRequest request) {
-        PurchaseOrder order = buildOrder(request);
-        // ... (Tu lógica de inventario aquí)
-        order.setStatus(OrderStatus.APPROVED);
-        return toResponse(repository.save(order));
-    }
-
-    public OrderResponse updateOrder(String orderNumber, CreateOrderRequest request) {
-        PurchaseOrder order = repository.findByOrderNumber(orderNumber)
-                .orElseThrow(() -> new OrderNotFoundException("No existe la orden " + orderNumber));
-        
-        order.setCustomerName(request.customerName());
-        order.setTotalAmount(calculateTotalWithDiscounts(request));
-        return toResponse(repository.save(order));
-    }
-
-    // --- LÓGICA DE DESCUENTOS CENTRALIZADA ---
-    private BigDecimal calculateTotalWithDiscounts(CreateOrderRequest request) {
-        BigDecimal baseSubtotal = request.lines().stream()
-                .map(l -> l.unitPrice().multiply(BigDecimal.valueOf(l.quantity())))
-                .reduce(BigDecimal.ZERO, BigDecimal::add);
-
-        BigDecimal discount = BigDecimal.ZERO;
-        String email = request.customerEmail().trim().toLowerCase();
-        String code = request.discountCode() != null ? request.discountCode().toUpperCase() : "";
-
-        if ("2X1".equals(code)) {
-            discount = request.lines().stream()
-                .filter(l -> l.quantity() >= 2)
-                .map(l -> l.unitPrice())
-                .min(BigDecimal::compareTo).orElse(BigDecimal.ZERO);
-        }
-
-        BigDecimal total = baseSubtotal.subtract(discount);
-        if (email.endsWith("@duocuc.cl")) {
-            total = total.multiply(new BigDecimal("0.75"));
-        }
-        return total;
     }
 
     private PurchaseOrder buildOrder(CreateOrderRequest request) {
         PurchaseOrder order = new PurchaseOrder();
-<<<<<<< HEAD
-        
+
         String currentUsername = SecurityContextHolder.getContext().getAuthentication().getName();
         order.setUsername(currentUsername);
-        
+
         order.setCustomerName(request.customerName().trim());
         order.setCustomerEmail(request.customerEmail().trim().toLowerCase());
         order.setShippingAddress(request.shippingAddress().trim());
+        order.setDiscountCode(request.discountCode());
         order.setStatus(OrderStatus.PENDING);
-        order.setTotalAmount(calculateTotal(request.lines()));
+        order.setTotalAmount(calculateTotalWithDiscounts(request));
 
         for (OrderLineRequest lineRequest : request.lines()) {
             OrderLine line = new OrderLine();
@@ -292,10 +213,31 @@ public class OrderService {
         return order;
     }
 
-    private BigDecimal calculateTotal(List<OrderLineRequest> lines) {
-        return lines.stream()
+    // Calcula el total aplicando los descuentos vigentes:
+    // - Código "2X1": descuenta el valor de la línea más barata entre las que tengan 2+ unidades.
+    // - Correo @duocuc.cl: 25% de descuento adicional sobre el total.
+    private BigDecimal calculateTotalWithDiscounts(CreateOrderRequest request) {
+        BigDecimal baseSubtotal = request.lines().stream()
                 .map(line -> line.unitPrice().multiply(BigDecimal.valueOf(line.quantity())))
                 .reduce(BigDecimal.ZERO, BigDecimal::add);
+
+        BigDecimal discount = BigDecimal.ZERO;
+        String email = request.customerEmail().trim().toLowerCase();
+        String code = request.discountCode() != null ? request.discountCode().toUpperCase() : "";
+
+        if ("2X1".equals(code)) {
+            discount = request.lines().stream()
+                    .filter(line -> line.quantity() >= 2)
+                    .map(OrderLineRequest::unitPrice)
+                    .min(BigDecimal::compareTo)
+                    .orElse(BigDecimal.ZERO);
+        }
+
+        BigDecimal total = baseSubtotal.subtract(discount);
+        if (email.endsWith("@duocuc.cl")) {
+            total = total.multiply(new BigDecimal("0.75"));
+        }
+        return total;
     }
 
     private int totalUnits(PurchaseOrder order) {
@@ -326,7 +268,7 @@ public class OrderService {
 
         return new OrderResponse(
                 order.getOrderNumber(),
-                order.getUsername(),         
+                order.getUsername(),
                 order.getCustomerName(),
                 order.getCustomerEmail(),
                 order.getShippingAddress(),
@@ -336,22 +278,7 @@ public class OrderService {
                 order.getRejectionReason(),
                 order.getCreatedAt(),
                 lines,
-                paymentUrl 
+                paymentUrl
         );
-=======
-        order.setCustomerName(request.customerName());
-        order.setCustomerEmail(request.customerEmail());
-        order.setTotalAmount(calculateTotalWithDiscounts(request));
-        order.setDiscountCode(request.discountCode());
-        order.setStatus(OrderStatus.PENDING);
-        return order;
     }
-
-    private OrderResponse toResponse(PurchaseOrder o) {
-        return new OrderResponse(o.getOrderNumber(), o.getUsername(), o.getCustomerName(), 
-                                 o.getCustomerEmail(), o.getShippingAddress(), o.getStatus(), 
-                                 o.getTotalAmount(), o.getTrackingCode(), o.getRejectionReason(), 
-                                 o.getCreatedAt(), new ArrayList<>());
->>>>>>> 46c7468a155f9b5b4b4e2143b720421e3a15402c
-    }
-}   
+}
