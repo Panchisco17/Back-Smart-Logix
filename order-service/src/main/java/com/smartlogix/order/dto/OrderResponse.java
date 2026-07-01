@@ -16,6 +16,7 @@ public record OrderResponse(
         String trackingCode,
         String reason,             
         OffsetDateTime createdAt,
-        List<OrderLineResponse> lines
+        List<OrderLineResponse> lines,
+        String paymentUrl
 ) {
 }

@@ -41,3 +41,7 @@ eureka:
   client:
     service-url:
       defaultZone: http://localhost:8761/eureka/
+
+
+mercadopago:
+  access-token: "TEST-952891411730288-063023-2e349e59e03f2ffcaf8b422d2d4ea1ff-394212853"
