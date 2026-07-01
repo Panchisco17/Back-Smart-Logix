@@ -6,6 +6,7 @@ import com.smartlogix.order.client.InventoryClientException;
 import com.smartlogix.order.client.ShipmentClient;
 import com.smartlogix.order.client.ShipmentRequest;
 import com.smartlogix.order.client.ShipmentResponse;
+import com.smartlogix.order.domain.DiscountCoupon;
 import com.smartlogix.order.domain.OrderLine;
 import com.smartlogix.order.domain.OrderStatus;
 import com.smartlogix.order.domain.PurchaseOrder;
@@ -14,8 +15,11 @@ import com.smartlogix.order.dto.OrderLineRequest;
 import com.smartlogix.order.dto.OrderLineResponse;
 import com.smartlogix.order.dto.OrderResponse;
 import com.smartlogix.order.exception.OrderNotFoundException;
+import com.smartlogix.order.repository.DiscountCouponRepository;
 import com.smartlogix.order.repository.PurchaseOrderRepository;
 import java.math.BigDecimal;
+import java.math.RoundingMode;
+import java.time.OffsetDateTime;
 import java.util.ArrayList;
 import java.util.List;
 import org.slf4j.Logger;
@@ -34,6 +38,7 @@ public class OrderService {
     private final PurchaseOrderRepository repository;
     private final InventoryClient inventoryClient;
     private final ShipmentClient shipmentClient;
+    private final DiscountCouponRepository discountCouponRepository;
 
     @Value("${app.gateway.base-url}")
     private String gatewayBaseUrl;
@@ -41,11 +46,13 @@ public class OrderService {
     public OrderService(
             PurchaseOrderRepository repository,
             InventoryClient inventoryClient,
-            ShipmentClient shipmentClient
+            ShipmentClient shipmentClient,
+            DiscountCouponRepository discountCouponRepository
     ) {
         this.repository = repository;
         this.inventoryClient = inventoryClient;
         this.shipmentClient = shipmentClient;
+        this.discountCouponRepository = discountCouponRepository;
     }
 
     public OrderResponse createOrder(CreateOrderRequest request) {
@@ -175,7 +182,9 @@ public class OrderService {
             existingOrder.addLine(line);
         }
 
-        existingOrder.setTotalAmount(calculateTotalWithDiscounts(request));
+        boolean firstPurchase = repository.countByCustomerEmailIgnoreCaseAndOrderNumberNot(
+                existingOrder.getCustomerEmail(), orderNumber) == 0;
+        existingOrder.setTotalAmount(calculateTotalWithDiscounts(request, firstPurchase));
 
         repository.save(existingOrder);
         return toResponse(existingOrder, null);
@@ -199,7 +208,9 @@ public class OrderService {
         order.setShippingAddress(request.shippingAddress().trim());
         order.setDiscountCode(request.discountCode());
         order.setStatus(OrderStatus.PENDING);
-        order.setTotalAmount(calculateTotalWithDiscounts(request));
+
+        boolean firstPurchase = repository.countByCustomerEmailIgnoreCase(order.getCustomerEmail()) == 0;
+        order.setTotalAmount(calculateTotalWithDiscounts(request, firstPurchase));
 
         for (OrderLineRequest lineRequest : request.lines()) {
             OrderLine line = new OrderLine();
@@ -213,31 +224,75 @@ public class OrderService {
         return order;
     }
 
-    // Calcula el total aplicando los descuentos vigentes:
-    // - Código "2X1": descuenta el valor de la línea más barata entre las que tengan 2+ unidades.
-    // - Correo @duocuc.cl: 25% de descuento adicional sobre el total.
-    private BigDecimal calculateTotalWithDiscounts(CreateOrderRequest request) {
+    // Calcula el total aplicando el cupón de descuento (si el código existe, está
+    // activo, dentro de su vigencia, y cumple las condiciones propias del cupón).
+    // Los cupones se administran desde el panel de admin (DiscountCouponController),
+    // no hay tipos de descuento hardcodeados aquí.
+    private BigDecimal calculateTotalWithDiscounts(CreateOrderRequest request, boolean firstPurchase) {
         BigDecimal baseSubtotal = request.lines().stream()
                 .map(line -> line.unitPrice().multiply(BigDecimal.valueOf(line.quantity())))
                 .reduce(BigDecimal.ZERO, BigDecimal::add);
 
-        BigDecimal discount = BigDecimal.ZERO;
-        String email = request.customerEmail().trim().toLowerCase();
-        String code = request.discountCode() != null ? request.discountCode().toUpperCase() : "";
-
-        if ("2X1".equals(code)) {
-            discount = request.lines().stream()
-                    .filter(line -> line.quantity() >= 2)
-                    .map(OrderLineRequest::unitPrice)
-                    .min(BigDecimal::compareTo)
-                    .orElse(BigDecimal.ZERO);
+        String code = request.discountCode() != null ? request.discountCode().trim().toUpperCase() : "";
+        if (code.isEmpty()) {
+            return baseSubtotal;
         }
 
-        BigDecimal total = baseSubtotal.subtract(discount);
-        if (email.endsWith("@duocuc.cl")) {
-            total = total.multiply(new BigDecimal("0.75"));
+        DiscountCoupon coupon = discountCouponRepository.findByCodeIgnoreCase(code).orElse(null);
+        if (coupon == null || !isCouponApplicable(coupon, request, firstPurchase, baseSubtotal)) {
+            return baseSubtotal;
         }
-        return total;
+
+        BigDecimal total = applyCoupon(coupon, request, baseSubtotal);
+        return total.compareTo(BigDecimal.ZERO) < 0 ? BigDecimal.ZERO : total;
+    }
+
+    private boolean isCouponApplicable(
+            DiscountCoupon coupon, CreateOrderRequest request, boolean firstPurchase, BigDecimal baseSubtotal) {
+        if (!coupon.isActive()) {
+            return false;
+        }
+
+        OffsetDateTime now = OffsetDateTime.now();
+        if (coupon.getStartDate() != null && now.isBefore(coupon.getStartDate())) {
+            return false;
+        }
+        if (coupon.getEndDate() != null && now.isAfter(coupon.getEndDate())) {
+            return false;
+        }
+        if (coupon.getMinSubtotal() != null && baseSubtotal.compareTo(coupon.getMinSubtotal()) < 0) {
+            return false;
+        }
+        if (coupon.getRequiredEmailDomain() != null && !coupon.getRequiredEmailDomain().isBlank()) {
+            String email = request.customerEmail().trim().toLowerCase();
+            if (!email.endsWith(coupon.getRequiredEmailDomain().toLowerCase())) {
+                return false;
+            }
+        }
+        return !coupon.isFirstPurchaseOnly() || firstPurchase;
+    }
+
+    private BigDecimal applyCoupon(DiscountCoupon coupon, CreateOrderRequest request, BigDecimal baseSubtotal) {
+        return switch (coupon.getType()) {
+            case PERCENTAGE -> {
+                BigDecimal percentage = coupon.getValue() != null ? coupon.getValue() : BigDecimal.ZERO;
+                BigDecimal factor = BigDecimal.ONE.subtract(
+                        percentage.divide(new BigDecimal("100"), 4, RoundingMode.HALF_UP));
+                yield baseSubtotal.multiply(factor);
+            }
+            case FIXED_AMOUNT -> {
+                BigDecimal amount = coupon.getValue() != null ? coupon.getValue() : BigDecimal.ZERO;
+                yield baseSubtotal.subtract(amount);
+            }
+            case TWO_FOR_ONE -> {
+                BigDecimal cheapestEligibleLine = request.lines().stream()
+                        .filter(line -> line.quantity() >= 2)
+                        .map(OrderLineRequest::unitPrice)
+                        .min(BigDecimal::compareTo)
+                        .orElse(BigDecimal.ZERO);
+                yield baseSubtotal.subtract(cheapestEligibleLine);
+            }
+        };
     }
 
     private int totalUnits(PurchaseOrder order) {
