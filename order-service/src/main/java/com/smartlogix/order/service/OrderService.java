@@ -18,7 +18,7 @@ import com.smartlogix.order.repository.PurchaseOrderRepository;
 import java.math.BigDecimal;
 import java.util.ArrayList;
 import java.util.List;
-import org.springframework.security.core.context.SecurityContextHolder; // <-- Importación para leer el token
+import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -117,29 +117,6 @@ public class OrderService {
         return toResponse(repository.save(order));
     }
 
-    public OrderResponse updateOrder(String orderNumber, CreateOrderRequest request) {
-        PurchaseOrder existingOrder = repository.findByOrderNumber(orderNumber)
-                .orElseThrow(() -> new OrderNotFoundException("No existe la orden " + orderNumber));
-
-        existingOrder.setCustomerName(request.customerName().trim());
-        existingOrder.setCustomerEmail(request.customerEmail().trim().toLowerCase());
-        existingOrder.setShippingAddress(request.shippingAddress().trim());
-        
-        existingOrder.getLines().clear();
-        for (OrderLineRequest lineRequest : request.lines()) {
-            OrderLine line = new OrderLine();
-            line.setSku(lineRequest.sku().trim().toUpperCase());
-            line.setQuantity(lineRequest.quantity());
-            line.setUnitPrice(lineRequest.unitPrice());
-            existingOrder.addLine(line);
-        }
-        
-        existingOrder.setTotalAmount(calculateTotal(request.lines()));
-
-        repository.save(existingOrder);
-        return toResponse(existingOrder);
-    }
-
     public void deleteOrder(String orderNumber) {
         PurchaseOrder order = repository.findByOrderNumber(orderNumber)
                 .orElseThrow(() -> new OrderNotFoundException("No existe la orden " + orderNumber));
@@ -150,15 +127,49 @@ public class OrderService {
     private PurchaseOrder buildOrder(CreateOrderRequest request) {
         PurchaseOrder order = new PurchaseOrder();
         
-        // --- AQUÍ ASIGNAMOS EL USUARIO DE LA SESIÓN ---
         String currentUsername = SecurityContextHolder.getContext().getAuthentication().getName();
         order.setUsername(currentUsername);
         
         order.setCustomerName(request.customerName().trim());
-        order.setCustomerEmail(request.customerEmail().trim().toLowerCase());
+        String email = request.customerEmail().trim().toLowerCase();
+        order.setCustomerEmail(email);
         order.setShippingAddress(request.shippingAddress().trim());
         order.setStatus(OrderStatus.PENDING);
-        order.setTotalAmount(calculateTotal(request.lines()));
+        
+        if (request.discountCode() != null) {
+            order.setDiscountCode(request.discountCode().trim().toUpperCase());
+        }
+
+        // 1. Calculamos el total base (sin descuentos)
+        BigDecimal baseSubtotal = calculateTotal(request.lines());
+        BigDecimal discountAmount = BigDecimal.ZERO;
+
+        // 2. Aplicamos lógica de descuento 2X1
+        if ("2X1".equals(order.getDiscountCode())) {
+            BigDecimal itemToDiscount = null;
+            for (OrderLineRequest line : request.lines()) {
+                if (line.quantity() >= 2) {
+                    if (itemToDiscount == null || line.unitPrice().compareTo(itemToDiscount) < 0) {
+                        itemToDiscount = line.unitPrice();
+                    }
+                }
+            }
+            if (itemToDiscount != null) {
+                discountAmount = discountAmount.add(itemToDiscount);
+            }
+        }
+
+        // Subtotal tras restar el 2x1
+        BigDecimal subtotalAfterPromo = baseSubtotal.subtract(discountAmount);
+
+        // 3. Aplicamos lógica de descuento del 25% institucional
+        if (email.endsWith("@duocuc.cl")) {
+            BigDecimal duocDiscount = subtotalAfterPromo.multiply(new BigDecimal("0.25"));
+            subtotalAfterPromo = subtotalAfterPromo.subtract(duocDiscount);
+        }
+
+        // Se guarda el total final a cobrar
+        order.setTotalAmount(subtotalAfterPromo);
 
         for (OrderLineRequest lineRequest : request.lines()) {
             OrderLine line = new OrderLine();

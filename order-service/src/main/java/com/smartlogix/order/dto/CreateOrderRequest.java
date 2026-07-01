@@ -10,6 +10,7 @@ public record CreateOrderRequest(
         @NotBlank String customerName,
         @NotBlank @Email String customerEmail,
         @NotBlank String shippingAddress,
+        String discountCode, // <-- Nuevo campo para recibir el código promocional
         @NotEmpty List<@Valid OrderLineRequest> lines
 ) {
 }

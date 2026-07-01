@@ -53,6 +53,10 @@ public class PurchaseOrder {
 
     @Column(length = 250)
     private String rejectionReason;
+    
+    // <-- NUEVO CAMPO PARA REGISTRAR EL DESCUENTO -->
+    @Column(length = 50)
+    private String discountCode;
 
     @Column(nullable = false)
     private OffsetDateTime createdAt;
@@ -138,6 +142,14 @@ public class PurchaseOrder {
 
     public void setRejectionReason(String rejectionReason) {
         this.rejectionReason = rejectionReason;
+    }
+
+    public String getDiscountCode() {
+        return discountCode;
+    }
+
+    public void setDiscountCode(String discountCode) {
+        this.discountCode = discountCode;
     }
 
     public OffsetDateTime getCreatedAt() {
