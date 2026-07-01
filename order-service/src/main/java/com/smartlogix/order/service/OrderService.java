@@ -1,11 +1,5 @@
 package com.smartlogix.order.service;
 
-import com.mercadopago.MercadoPagoConfig;
-import com.mercadopago.client.preference.PreferenceBackUrlsRequest;
-import com.mercadopago.client.preference.PreferenceClient;
-import com.mercadopago.client.preference.PreferenceItemRequest;
-import com.mercadopago.client.preference.PreferenceRequest;
-import com.mercadopago.resources.preference.Preference;
 import com.smartlogix.order.client.InventoryAvailabilityResponse;
 import com.smartlogix.order.client.InventoryClient;
 import com.smartlogix.order.client.InventoryClientException;
@@ -24,6 +18,8 @@ import com.smartlogix.order.repository.PurchaseOrderRepository;
 import java.math.BigDecimal;
 import java.util.ArrayList;
 import java.util.List;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Service;
@@ -33,13 +29,14 @@ import org.springframework.transaction.annotation.Transactional;
 @Transactional
 public class OrderService {
 
+    private static final Logger log = LoggerFactory.getLogger(OrderService.class);
+
     private final PurchaseOrderRepository repository;
     private final InventoryClient inventoryClient;
     private final ShipmentClient shipmentClient;
 
-   
-    @Value("${mercadopago.access-token}") --> se pasa el token 
-    private String mercadoPagoToken;
+    @Value("${app.gateway.base-url}")
+    private String gatewayBaseUrl;
 
     public OrderService(
             PurchaseOrderRepository repository,
@@ -84,43 +81,36 @@ public class OrderService {
         order.setStatus(OrderStatus.APPROVED);
         repository.save(order);
 
-       
-        MercadoPagoConfig.setAccessToken(mercadoPagoToken); --> se generan los link de mercadopago 
-        String initPointUrl = null;
+        // Pasarela simulada: el "link de pago" apunta al microservicio dedicado
+        // payment-service, que orquesta el checkout y notifica el resultado aquí.
+        String paymentUrl = gatewayBaseUrl + "/api/payments/" + order.getOrderNumber() + "/checkout";
 
-        try {
-            List<PreferenceItemRequest> items = new ArrayList<>();
-            PreferenceItemRequest item = PreferenceItemRequest.builder()
-                    .title("Pedido Mil Sabores - Orden " + order.getOrderNumber())
-                    .quantity(1)
-                    .unitPrice(order.getTotalAmount()) // Usamos el total real de tu carrito
-                    .currencyId("CLP")
-                    .build();
-            items.add(item);
+        return toResponse(order, paymentUrl);
+    }
 
-            PreferenceBackUrlsRequest backUrls = PreferenceBackUrlsRequest.builder()
-                    .success("http://localhost:5173/mis-pedidos") 
-                    .failure("http://localhost:5173/carrito")     
-                    .pending("http://localhost:5173/mis-pedidos") 
-                    .build();
+    // Llamado por payment-service (microservicio dedicado a la pasarela) para
+    // aplicar el resultado del pago: marca PAID o libera el stock reservado y
+    // marca FAILED. No decide redirecciones de frontend; eso lo resuelve
+    // payment-service según el status devuelto aquí.
+    public OrderResponse applyPaymentConfirmation(String orderNumber, boolean approved) {
+        PurchaseOrder order = repository.findByOrderNumber(orderNumber)
+                .orElseThrow(() -> new OrderNotFoundException("No existe la orden " + orderNumber));
 
-            PreferenceRequest preferenceRequest = PreferenceRequest.builder()
-                    .items(items)
-                    .backUrls(backUrls)
-                    .autoReturn("approved") 
-                    .build();
-
-            PreferenceClient client = new PreferenceClient();
-            Preference preference = client.create(preferenceRequest);
-            
-            initPointUrl = preference.getInitPoint(); // Obtenemos el link de cobro
-
-        } catch (Exception e) {
-            System.err.println("Error al generar el link de Mercado Pago: " + e.getMessage());
+        if (order.getStatus() != OrderStatus.APPROVED) {
+            return toResponse(order, null);
         }
 
-        // Retornamos la orden aprobada junto con la URL de pago
-        return toResponse(order, initPointUrl);
+        if (approved) {
+            order.setStatus(OrderStatus.PAID);
+            repository.save(order);
+            return toResponse(order, null);
+        }
+
+        releaseReservedLines(order.getLines());
+        order.setStatus(OrderStatus.FAILED);
+        order.setRejectionReason("Pago rechazado (simulado)");
+        repository.save(order);
+        return toResponse(order, null);
     }
 
     @Transactional(readOnly = true)
@@ -178,6 +168,7 @@ public class OrderService {
         for (OrderLineRequest lineRequest : request.lines()) {
             OrderLine line = new OrderLine();
             line.setSku(lineRequest.sku().trim().toUpperCase());
+            line.setProductName(lineRequest.productName() != null ? lineRequest.productName().trim() : null);
             line.setQuantity(lineRequest.quantity());
             line.setUnitPrice(lineRequest.unitPrice());
             existingOrder.addLine(line);
@@ -211,6 +202,7 @@ public class OrderService {
         for (OrderLineRequest lineRequest : request.lines()) {
             OrderLine line = new OrderLine();
             line.setSku(lineRequest.sku().trim().toUpperCase());
+            line.setProductName(lineRequest.productName() != null ? lineRequest.productName().trim() : null);
             line.setQuantity(lineRequest.quantity());
             line.setUnitPrice(lineRequest.unitPrice());
             order.addLine(line);
@@ -233,16 +225,18 @@ public class OrderService {
         for (OrderLine line : reservedLines) {
             try {
                 inventoryClient.release(line.getSku(), line.getQuantity());
-            } catch (Exception ignored) {
+            } catch (Exception ex) {
+                log.error("No fue posible liberar el stock reservado para SKU {} (cantidad {})",
+                        line.getSku(), line.getQuantity(), ex);
             }
         }
     }
 
-    --aqui esta recibiendo el paymentUrl
     private OrderResponse toResponse(PurchaseOrder order, String paymentUrl) {
         List<OrderLineResponse> lines = order.getLines().stream()
                 .map(line -> new OrderLineResponse(
                         line.getSku(),
+                        line.getProductName(),
                         line.getQuantity(),
                         line.getUnitPrice(),
                         line.getUnitPrice().multiply(BigDecimal.valueOf(line.getQuantity()))

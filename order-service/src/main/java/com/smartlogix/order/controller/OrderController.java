@@ -58,6 +58,15 @@ public class OrderController {
     @DeleteMapping("/{orderNumber}")
     public ResponseEntity<Void> deleteOrder(@PathVariable String orderNumber) {
         orderService.deleteOrder(orderNumber);
-        return ResponseEntity.noContent().build(); 
+        return ResponseEntity.noContent().build();
+    }
+
+    // Endpoint interno: lo invoca payment-service (no el navegador) para aplicar
+    // el resultado del pago una vez que el cliente aprueba o rechaza en la pasarela.
+    @PutMapping("/{orderNumber}/payment-confirmation")
+    public OrderResponse applyPaymentConfirmation(
+            @PathVariable String orderNumber,
+            @RequestParam boolean approved) {
+        return orderService.applyPaymentConfirmation(orderNumber, approved);
     }
 }

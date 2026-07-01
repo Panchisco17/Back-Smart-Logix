@@ -7,6 +7,7 @@ import io.jsonwebtoken.Jwts;
 import io.jsonwebtoken.security.Keys;
 import java.nio.charset.StandardCharsets;
 import java.util.List;
+import java.util.regex.Pattern;
 import javax.crypto.SecretKey;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -31,8 +32,15 @@ public class JwtAuthenticationFilter implements GlobalFilter, Ordered {
             "/api/auth/login",
             "/api/auth/register",
             "/actuator/health",
-            "/actuator/info"
+            "/actuator/info",
+            "/assets"
     );
+
+    // El checkout/confirmación de pago (payment-service) lo visita el navegador
+    // vía redirect directo (no un fetch de la SPA), por lo que no puede llevar
+    // el header Authorization.
+    private static final Pattern PAYMENT_PATH_PATTERN =
+            Pattern.compile("^/api/payments/[^/]+/(checkout|confirm)$");
 
     private final SecretKey signingKey;
 
@@ -100,7 +108,8 @@ public class JwtAuthenticationFilter implements GlobalFilter, Ordered {
 
     private boolean isPublicPath(String path) {
         return PUBLIC_PATHS.stream()
-                .anyMatch(publicPath -> path.equals(publicPath) || path.startsWith(publicPath + "/"));
+                .anyMatch(publicPath -> path.equals(publicPath) || path.startsWith(publicPath + "/"))
+                || PAYMENT_PATH_PATTERN.matcher(path).matches();
     }
 
     private Mono<Void> onUnauthorized(ServerWebExchange exchange, String message) {
