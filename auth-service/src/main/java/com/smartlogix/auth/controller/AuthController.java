@@ -5,6 +5,8 @@ import com.smartlogix.auth.service.AuthService;
 import jakarta.validation.Valid;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
+import org.springframework.security.access.prepost.PreAuthorize;
+import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.*;
 
 /**
@@ -57,10 +59,35 @@ public class AuthController {
     }
     /**
      *
-     * GET /api/auth/users — Obtiene todos los usuarios.
+     * GET /api/auth/users — Obtiene todos los usuarios. Solo administradores.
      */
     @GetMapping("/users")
-    public java.util.List<com.smartlogix.auth.domain.UserEntity> getAllUsers() {
+    @PreAuthorize("hasAuthority('ROLE_ADMIN')")
+    public java.util.List<UserResponse> getAllUsers() {
         return authService.getAllUsers();
+    }
+
+    /**
+     * PATCH /api/auth/users/{id}/role — Cambia el rol de un usuario. Solo administradores.
+     */
+    @PatchMapping("/users/{id}/role")
+    @PreAuthorize("hasAuthority('ROLE_ADMIN')")
+    public UserResponse updateUserRole(
+            @PathVariable Long id,
+            @Valid @RequestBody UpdateRoleRequest request,
+            Authentication authentication) {
+        return authService.updateRole(id, request.role(), authentication.getName());
+    }
+
+    /**
+     * PATCH /api/auth/users/{id}/status — Habilita o suspende una cuenta. Solo administradores.
+     */
+    @PatchMapping("/users/{id}/status")
+    @PreAuthorize("hasAuthority('ROLE_ADMIN')")
+    public UserResponse updateUserStatus(
+            @PathVariable Long id,
+            @RequestBody UpdateStatusRequest request,
+            Authentication authentication) {
+        return authService.updateEnabled(id, request.enabled(), authentication.getName());
     }
 }

@@ -6,6 +6,7 @@ import com.smartlogix.order.service.DiscountCouponService;
 import jakarta.validation.Valid;
 import java.util.List;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PatchMapping;
@@ -27,17 +28,21 @@ public class DiscountCouponController {
         this.discountCouponService = discountCouponService;
     }
 
+    // Sin restricción de rol: el checkout de la tienda (cualquier cliente
+    // autenticado) necesita leer los cupones vigentes para validar códigos.
     @GetMapping
     public List<DiscountCouponResponse> listCoupons() {
         return discountCouponService.getCoupons();
     }
 
     @PostMapping
+    @PreAuthorize("hasAuthority('ROLE_ADMIN')")
     public DiscountCouponResponse createCoupon(@Valid @RequestBody DiscountCouponRequest request) {
         return discountCouponService.createCoupon(request);
     }
 
     @PutMapping("/{id}")
+    @PreAuthorize("hasAuthority('ROLE_ADMIN')")
     public DiscountCouponResponse updateCoupon(
             @PathVariable Long id,
             @Valid @RequestBody DiscountCouponRequest request) {
@@ -45,6 +50,7 @@ public class DiscountCouponController {
     }
 
     @PatchMapping("/{id}/status")
+    @PreAuthorize("hasAuthority('ROLE_ADMIN')")
     public DiscountCouponResponse setActive(
             @PathVariable Long id,
             @RequestParam boolean active) {
@@ -52,6 +58,7 @@ public class DiscountCouponController {
     }
 
     @DeleteMapping("/{id}")
+    @PreAuthorize("hasAuthority('ROLE_ADMIN')")
     public ResponseEntity<Void> deleteCoupon(@PathVariable Long id) {
         discountCouponService.deleteCoupon(id);
         return ResponseEntity.noContent().build();

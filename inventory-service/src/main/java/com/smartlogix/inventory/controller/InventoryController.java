@@ -7,6 +7,7 @@ import com.smartlogix.inventory.service.InventoryService;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.Min;
 import java.util.List;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PatchMapping;
@@ -29,6 +30,7 @@ public class InventoryController {
     }
 
     @PostMapping("/items")
+    @PreAuthorize("hasAnyAuthority('ROLE_ADMIN', 'ROLE_WAREHOUSE_MANAGER')")
     public InventoryItemResponse create(@Valid @RequestBody CreateInventoryItemRequest request) {
         return inventoryService.createItem(request);
     }
@@ -79,6 +81,7 @@ public class InventoryController {
     }
 
     @PatchMapping("/items/{sku}/dispatch")
+    @PreAuthorize("hasAnyAuthority('ROLE_ADMIN', 'ROLE_WAREHOUSE_MANAGER')")
     public InventoryItemResponse dispatch(
             @PathVariable String sku,
             @RequestParam @Min(1) int quantity) {
@@ -86,6 +89,7 @@ public class InventoryController {
     }
 
     @PostMapping("/items/{sku}/dispatch")
+    @PreAuthorize("hasAnyAuthority('ROLE_ADMIN', 'ROLE_WAREHOUSE_MANAGER')")
     public InventoryItemResponse dispatchPost(
             @PathVariable String sku,
             @RequestParam @Min(1) int quantity) {

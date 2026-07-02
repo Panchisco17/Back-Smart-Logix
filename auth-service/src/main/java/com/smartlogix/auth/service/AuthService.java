@@ -4,6 +4,7 @@ import com.smartlogix.auth.domain.Role;
 import com.smartlogix.auth.domain.UserEntity;
 import com.smartlogix.auth.dto.*;
 import com.smartlogix.auth.exception.AuthException;
+import com.smartlogix.auth.exception.UserNotFoundException;
 import com.smartlogix.auth.repository.UserRepository;
 import com.smartlogix.auth.security.JwtProvider;
 import com.smartlogix.auth.strategy.AuthStrategyResolver;
@@ -116,7 +117,48 @@ public class AuthService {
      * Obtiene la lista de todos los usuarios registrados.
      */
     @Transactional(readOnly = true)
-    public java.util.List<UserEntity> getAllUsers() {
-        return userRepository.findAll();
+    public java.util.List<UserResponse> getAllUsers() {
+        return userRepository.findAll().stream().map(UserResponse::from).toList();
+    }
+
+    /**
+     * Cambia el rol de un usuario. Un admin no puede cambiar su propio rol
+     * para evitar que se quede sin permisos accidentalmente (auto-bloqueo).
+     */
+    public UserResponse updateRole(Long id, String roleValue, String currentUsername) {
+        UserEntity user = findUserOrThrow(id);
+
+        if (user.getUsername().equalsIgnoreCase(currentUsername)) {
+            throw new IllegalStateException("No puedes cambiar tu propio rol.");
+        }
+
+        Role role;
+        try {
+            role = Role.valueOf(roleValue);
+        } catch (IllegalArgumentException e) {
+            throw new IllegalStateException("Rol invalido: " + roleValue);
+        }
+
+        user.setRole(role);
+        return UserResponse.from(userRepository.save(user));
+    }
+
+    /**
+     * Habilita o suspende una cuenta. Un admin no puede suspenderse a si mismo.
+     */
+    public UserResponse updateEnabled(Long id, boolean enabled, String currentUsername) {
+        UserEntity user = findUserOrThrow(id);
+
+        if (user.getUsername().equalsIgnoreCase(currentUsername)) {
+            throw new IllegalStateException("No puedes suspender tu propia cuenta.");
+        }
+
+        user.setEnabled(enabled);
+        return UserResponse.from(userRepository.save(user));
+    }
+
+    private UserEntity findUserOrThrow(Long id) {
+        return userRepository.findById(id)
+                .orElseThrow(() -> new UserNotFoundException(id));
     }
 }

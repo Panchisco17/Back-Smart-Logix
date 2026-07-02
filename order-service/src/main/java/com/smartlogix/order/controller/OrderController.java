@@ -6,6 +6,7 @@ import com.smartlogix.order.service.OrderService;
 import jakarta.validation.Valid;
 import java.util.List;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -42,6 +43,7 @@ public class OrderController {
     }
 
     @PutMapping("/{orderNumber}/status")
+    @PreAuthorize("hasAnyAuthority('ROLE_ADMIN', 'ROLE_WAREHOUSE_MANAGER')")
     public ResponseEntity<OrderResponse> updateOrderStatus(
             @PathVariable String orderNumber,
             @RequestParam String status) {
@@ -49,13 +51,15 @@ public class OrderController {
     }
 
     @PutMapping("/{orderNumber}")
+    @PreAuthorize("hasAuthority('ROLE_ADMIN')")
     public OrderResponse updateOrder(
-            @PathVariable String orderNumber, 
-            @Valid @RequestBody CreateOrderRequest request) { 
+            @PathVariable String orderNumber,
+            @Valid @RequestBody CreateOrderRequest request) {
         return orderService.updateOrder(orderNumber, request);
     }
 
     @DeleteMapping("/{orderNumber}")
+    @PreAuthorize("hasAuthority('ROLE_ADMIN')")
     public ResponseEntity<Void> deleteOrder(@PathVariable String orderNumber) {
         orderService.deleteOrder(orderNumber);
         return ResponseEntity.noContent().build();
@@ -63,7 +67,11 @@ public class OrderController {
 
     // Endpoint interno: lo invoca payment-service (no el navegador) para aplicar
     // el resultado del pago una vez que el cliente aprueba o rechaza en la pasarela.
+    // Restringido a ROLE_ADMIN porque payment-service siempre llama con su token
+    // de servicio (ese rol) — así un usuario normal no puede marcar su propia
+    // orden como pagada llamando a este endpoint directamente.
     @PutMapping("/{orderNumber}/payment-confirmation")
+    @PreAuthorize("hasAuthority('ROLE_ADMIN')")
     public OrderResponse applyPaymentConfirmation(
             @PathVariable String orderNumber,
             @RequestParam boolean approved) {

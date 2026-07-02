@@ -4,23 +4,26 @@ Proyecto de referencia para el caso semestral de Informatica.
 Incluye una arquitectura realista para PYMEs eCommerce con estos modulos:
 
 - Gestion de Inventario (`inventory-service`)
-- Procesamiento de Pedidos (`order-service`)
+- Procesamiento de Pedidos y Cupones de descuento (`order-service`)
 - Coordinacion de Envios (`shipment-service`)
+- Pasarela de pago real con Transbank Webpay Plus (`payment-service`)
 
 Y componentes de infraestructura:
 
 - Descubrimiento de servicios (`discovery-service` con Eureka)
 - API Gateway (`api-gateway`)
-- Autenticacion JWT (`auth-service`)
+- Autenticacion JWT y gestion de usuarios/roles (`auth-service`)
 
 ## Patrones de arquitectura implementados
 
 - `Service Discovery`: registro dinamico con Eureka.
 - `API Gateway`: punto unico de entrada para frontend o clientes.
-- `Database per Service`: cada microservicio usa su propia base H2.
+- `Database per Service`: cada microservicio usa su propia base H2 (`payment-service` es stateless, sin base propia).
 - `Factory Method`: en `shipment-service` para crear planes de envio por zona.
 - `Circuit Breaker`: en `order-service` para llamadas a `shipment-service`.
-- `Synchronous orchestration`: `order-service` coordina inventario + envio.
+- `Synchronous orchestration`: `order-service` coordina inventario + envio + pago.
+- `Strategy Pattern`: en `auth-service` para autenticacion por username o email.
+- `Role-Based Access Control (RBAC)`: `@PreAuthorize` a nivel de metodo en todos los endpoints administrativos (ver seccion de seguridad).
 
 ## Estructura del repositorio
 
@@ -30,6 +33,7 @@ Y componentes de infraestructura:
 - `inventory-service` (puerto interno `8081`)
 - `order-service` (puerto interno `8082`)
 - `shipment-service` (puerto interno `8083`)
+- `payment-service` (puerto interno `8085`)
 
 ## Requisitos
 
@@ -123,6 +127,12 @@ Para produccion cambia esas claves con variables de entorno:
 - `SMARTLOGIX_SEED_WAREHOUSE_PASSWORD`
 - `JWT_SECRET`
 
+Para `payment-service` (Transbank), en produccion sobrescribe:
+
+- `TRANSBANK_COMMERCE_CODE`
+- `TRANSBANK_API_KEY`
+- `TRANSBANK_ENVIRONMENT` (`LIVE` en produccion; por defecto `TEST`)
+
 ### 2) Listar inventario inicial
 
 ```powershell
@@ -173,29 +183,66 @@ Invoke-RestMethod `
 - `POST /api/auth/register` publico
 - `POST /api/auth/login` publico
 - `GET /api/auth/validate` protegido con `Authorization: Bearer <token>`
+- `GET /api/auth/users` **ROLE_ADMIN** — lista todos los usuarios (sin exponer el hash de password)
+- `PATCH /api/auth/users/{id}/role` **ROLE_ADMIN** — cambia el rol de un usuario (body `{"role": "ROLE_ADMIN"}`)
+- `PATCH /api/auth/users/{id}/status` **ROLE_ADMIN** — habilita o suspende una cuenta (body `{"enabled": false}`)
 
 ### Inventory Service
 
 - `GET /api/inventory/items`
-- `POST /api/inventory/items`
+- `POST /api/inventory/items` **ROLE_ADMIN / ROLE_WAREHOUSE_MANAGER**
 - `GET /api/inventory/items/{sku}`
 - `GET /api/inventory/items/{sku}/availability?quantity=...`
 - `PATCH|POST /api/inventory/items/{sku}/reserve?quantity=...`
 - `PATCH|POST /api/inventory/items/{sku}/release?quantity=...`
-- `PATCH|POST /api/inventory/items/{sku}/dispatch?quantity=...`
+- `PATCH|POST /api/inventory/items/{sku}/dispatch?quantity=...` **ROLE_ADMIN / ROLE_WAREHOUSE_MANAGER**
 
 ### Order Service
 
 - `POST /api/orders`
 - `GET /api/orders`
 - `GET /api/orders/{orderNumber}`
+- `PUT /api/orders/{orderNumber}/status` **ROLE_ADMIN / ROLE_WAREHOUSE_MANAGER**
+- `PUT /api/orders/{orderNumber}` **ROLE_ADMIN**
+- `DELETE /api/orders/{orderNumber}` **ROLE_ADMIN**
+- `PUT /api/orders/{orderNumber}/payment-confirmation?approved=...` **ROLE_ADMIN** (solo lo llama el JWT de servicio de `payment-service`)
+
+### Cupones de descuento (`order-service`, base `/api/coupons`)
+
+- `GET /api/coupons` — publico para usuarios autenticados (necesario en el checkout)
+- `POST /api/coupons` **ROLE_ADMIN**
+- `PUT /api/coupons/{id}` **ROLE_ADMIN**
+- `PATCH /api/coupons/{id}/status?active=true|false` **ROLE_ADMIN**
+- `DELETE /api/coupons/{id}` **ROLE_ADMIN**
+
+Ver detalle completo del modelo de cupones y cupones precargados en
+[`docs/PAGOS-Y-CUPONES.md`](docs/PAGOS-Y-CUPONES.md).
 
 ### Shipment Service
 
-- `POST /api/shipments`
-- `GET /api/shipments`
-- `GET /api/shipments/{trackingCode}`
-- `PATCH /api/shipments/{trackingCode}/status?value=IN_TRANSIT`
+- `POST /api/shipments` **ROLE_ADMIN / ROLE_WAREHOUSE_MANAGER**
+- `GET /api/shipments` **ROLE_ADMIN / ROLE_WAREHOUSE_MANAGER**
+- `GET /api/shipments/{trackingCode}` **ROLE_ADMIN / ROLE_WAREHOUSE_MANAGER**
+- `PATCH /api/shipments/{trackingCode}/status?value=IN_TRANSIT` **ROLE_ADMIN / ROLE_WAREHOUSE_MANAGER**
+- `DELETE /api/shipments/{trackingCode}` **ROLE_ADMIN / ROLE_WAREHOUSE_MANAGER**
+
+### Payment Service (Transbank Webpay Plus, base `/api/payments`)
+
+- `GET /api/payments/{orderNumber}/checkout` — publico (redirect del navegador, sin JWT), crea la transaccion real en Transbank
+- `GET|POST /api/payments/{orderNumber}/return` — publico, Transbank redirige aqui para confirmar el pago
+
+Ver flujo completo, credenciales de sandbox y tarjetas de prueba en
+[`docs/PAGOS-Y-CUPONES.md`](docs/PAGOS-Y-CUPONES.md).
+
+## Seguridad por rol (RBAC)
+
+Todos los endpoints administrativos estan protegidos con `@PreAuthorize` a
+nivel de metodo (Spring Security), validando la autoridad exacta que viene
+en el JWT (`ROLE_ADMIN`, `ROLE_WAREHOUSE_MANAGER`). El frontend tambien deriva
+el rol del usuario **desde el JWT decodificado**, nunca desde el objeto
+`localStorage.user` (que es JSON editable desde las DevTools del navegador),
+para que cambiar ese valor manualmente no otorgue privilegios que el backend
+no valide de forma independiente.
 
 ## Flujo funcional implementado
 

@@ -21,34 +21,42 @@ pedidos" — el mismo criterio que ya se usaba para separar inventario, envíos 
 estado (stateless). Toda la información de la orden (productos, total,
 estado) la obtiene en tiempo real desde `order-service` vía REST.
 
-### 1.2 Flujo completo
+### 1.2 Flujo completo (integración real con Transbank Webpay Plus)
 
 ```
-Cliente (SPA)                order-service            payment-service          order-service
-     |                            |                          |                       |
-     | POST /api/orders           |                          |                       |
-     |--------------------------->|                          |                       |
-     |                            | reserva stock            |                       |
-     |                            | crea orden APPROVED      |                       |
-     |  <-- paymentUrl ---------- |                          |                       |
-     |   (.../api/payments/{orden}/checkout)                 |                       |
-     |                                                       |                       |
-     | GET paymentUrl (navegador, redirect completo)         |                       |
-     |------------------------------------------------------>|                       |
-     |                                                       | GET /api/orders/{id}  |
-     |                                                       |---------------------->|
-     |                                                       |<---- datos de orden --|
-     |  <-- HTML de la pasarela (form de tarjeta) -----------|                       |
-     |                                                       |                       |
-     | (usuario llena tarjeta y hace click en "Continuar")   |                       |
-     | GET .../confirm?approved=true|false                   |                       |
-     |------------------------------------------------------>|                       |
-     |                                                       | PUT .../payment-confirmation?approved=... |
-     |                                                       |---------------------->|
-     |                                                       |                       | marca PAID o
-     |                                                       |                       | libera stock y marca FAILED
-     |                                                       |<-- orden actualizada -|
-     |  <-- redirect 302 a frontend (success/failure/pending)|                       |
+Cliente (SPA)         order-service        payment-service        Transbank (sandbox)      order-service
+     |                      |                      |                       |                     |
+     | POST /api/orders     |                      |                       |                     |
+     |--------------------->|                      |                       |                     |
+     |                      | reserva stock        |                       |                     |
+     |                      | crea orden APPROVED  |                       |                     |
+     | <-- paymentUrl ------|                      |                       |                     |
+     |   (.../api/payments/{orden}/checkout)       |                       |                     |
+     |                                             |                       |                     |
+     | GET paymentUrl (navegador, redirect)        |                       |                     |
+     |-------------------------------------------->|                       |                     |
+     |                                             | GET /api/orders/{id}  |                     |
+     |                                             |------------------------------------------>  |
+     |                                             |<---------------- datos de orden -----------  |
+     |                                             | transaction.create(buyOrder, sessionId,      |
+     |                                             |   monto, returnUrl)   |                     |
+     |                                             |---------------------->|                     |
+     |                                             |<--- token_ws + url ---|                     |
+     | <-- HTML autoenviable (POST token_ws) ------|                       |                     |
+     |--------------------------------------------------------------------->|                    |
+     |             (usuario paga en el sitio real de Transbank)             |                    |
+     | <----------------------- redirect (GET/POST token_ws) --------------|                     |
+     |-------------------------------------------->|                       |                     |
+     |         /api/payments/{orden}/return         |                       |                     |
+     |                                             | transaction.commit(token_ws)                 |
+     |                                             |---------------------->|                     |
+     |                                             |<-- status + código ---|                     |
+     |                                             | PUT .../payment-confirmation?approved=...    |
+     |                                             |------------------------------------------->  |
+     |                                             |                       |     marca PAID o     |
+     |                                             |                       |  libera stock/FAILED |
+     |                                             |<---------------------- orden actualizada ---  |
+     | <-- redirect 302 a frontend (success/failure/pending) --------------|                     |
 ```
 
 Puntos clave:
@@ -56,10 +64,16 @@ Puntos clave:
 - El link de pago (`paymentUrl`) que devuelve `order-service` al crear la
   orden **no apunta a sí mismo**: apunta a `payment-service` a través del
   gateway (`http://localhost:8080/api/payments/{orderNumber}/checkout`).
-- El navegador llega a `payment-service` con un **redirect normal**, no un
-  `fetch` de la SPA — por lo tanto **no lleva el JWT del usuario**. Esto es
-  intencional (simula cómo funciona una pasarela real: el banco no conoce el
-  token de tu sesión en la tienda).
+- `payment-service` crea una **transacción real** contra el ambiente de
+  integración/sandbox de Transbank (`WebpayPlus.Transaction.create(...)`) y
+  devuelve un formulario HTML que se **autoenvía por POST** con el
+  `token_ws` hacia la URL real de Transbank (`webpay3gint.transbank.cl`) —
+  el usuario paga en el sitio real de Transbank, no en un formulario propio.
+- Transbank redirige de vuelta a `/api/payments/{orderNumber}/return`
+  (puede ser `GET` o `POST` según la versión de su API, por eso el endpoint
+  acepta ambos métodos). Ahí `payment-service` hace el
+  `transaction.commit(token_ws)` para obtener el resultado real
+  (aprobado/rechazado) directamente desde Transbank.
 - Como `payment-service` sí necesita hablar con `order-service` (autenticado),
   firma su **propio JWT de servicio** con el mismo secreto compartido
   (`jwt.secret`) cada vez que no hay un token de usuario en el contexto de la
@@ -72,34 +86,37 @@ Puntos clave:
 
 | Método | Ruta | Quién lo llama | Descripción |
 |---|---|---|---|
-| `GET` | `/{orderNumber}/checkout` | Navegador (redirect) | Devuelve el HTML de la pasarela simulada (estilo Webpay/Transbank) |
-| `GET` | `/{orderNumber}/confirm?approved=true\|false` | Navegador (link del formulario) | Aplica el resultado en `order-service` y redirige (302) al frontend |
+| `GET` | `/{orderNumber}/checkout` | Navegador (redirect) | Crea la transacción en Transbank y devuelve el formulario HTML autoenviable hacia Webpay Plus |
+| `GET`/`POST` | `/{orderNumber}/return` | Transbank (redirect de vuelta) | Confirma (`commit`) la transacción real, actualiza la orden y redirige (302) al frontend |
 
 **`order-service`** (`OrderController`, base `/api/orders`):
 
 | Método | Ruta | Quién lo llama | Descripción |
 |---|---|---|---|
-| `PUT` | `/{orderNumber}/payment-confirmation?approved=true\|false` | Solo `payment-service` (interno, protegido con JWT) | Marca la orden `PAID` (aprobado) o libera el stock reservado y marca `FAILED` (rechazado) |
+| `PUT` | `/{orderNumber}/payment-confirmation?approved=true\|false` | Solo `payment-service` (interno, protegido con JWT, requiere `ROLE_ADMIN`) | Marca la orden `PAID` (aprobado) o libera el stock reservado y marca `FAILED` (rechazado) |
 
 Este último endpoint **no existe para que lo llame el navegador ni la SPA** —
-está protegido igual que el resto de `/api/**` (requiere JWT válido), y solo
-`payment-service` lo alcanza con su token de servicio.
+desde la corrección de seguridad de rol (ver `README.md`), está restringido a
+`ROLE_ADMIN`, rol que solo el JWT de servicio de `payment-service` posee. Un
+cliente autenticado con `ROLE_USER` ya no puede llamarlo directamente para
+marcar su propia orden como pagada sin pasar por Transbank.
 
-### 1.4 La pasarela simulada (HTML)
+### 1.4 Credenciales y ambiente Transbank
 
-`PaymentService.buildCheckoutPage()` genera una página con estilo similar a
-Webpay/Transbank:
+`payment-service` usa el **ambiente de integración (sandbox) público** de
+Transbank, documentado en transbankdevelopers.cl (no son credenciales
+secretas, son las mismas para cualquier comercio de prueba):
 
-- Resumen de la orden con **nombre real del producto** (no el SKU), cantidad
-  y precio formateado en pesos chilenos (`$18.990`, no `$18990.00`).
-- Formulario de tarjeta con vista previa en vivo (número enmascarado, nombre,
-  vencimiento) y detección de marca (VISA/MC/AMEX) según el primer dígito.
-- Logo real de RedCompra (`payment-service/src/main/resources/static/assets/redcompra-logo.jpg`,
-  servido públicamente vía `/assets/**`).
-- **Reglas de simulación**: cualquier tarjeta con datos válidos (16 dígitos,
-  vencimiento futuro, CVV de 3 dígitos) aprueba el pago. Una tarjeta que
-  **empiece con "4000"** simula un rechazo (fondos insuficientes). El link
-  "Anular compra y volver" rechaza directamente.
+- Código de comercio: `597055555532`
+- Ambiente: `TEST` (`IntegrationType.TEST`)
+- Tarjeta de prueba VISA que aprueba: `4051885600446623` (cualquier CVV,
+  fecha de vencimiento futura)
+- Tarjeta Mastercard que simula rechazo: `5186059559590568`
+- Autenticador del banco de prueba: RUT `11.111.111-1`, clave `123`
+
+En producción estas credenciales se sobrescriben con variables de entorno
+(`TRANSBANK_COMMERCE_CODE`, `TRANSBANK_API_KEY`, `TRANSBANK_ENVIRONMENT=LIVE`)
+usando las credenciales reales entregadas por Transbank al comercio.
 
 ### 1.5 Configuración (`application.yml`)
 
@@ -111,15 +128,17 @@ app:
     success-url: http://localhost:5173/?payment=success#/my-orders
     failure-url: http://localhost:5173/?payment=failed#/products
     pending-url: http://localhost:5173/?payment=pending#/my-orders
+
+transbank:
+  webpay:
+    commerce-code: ${TRANSBANK_COMMERCE_CODE:597055555532}
+    api-key: ${TRANSBANK_API_KEY:579B532A7440BB0C9079DED94D31EA1615BACEB56610332264630D42D0A36B1C}
+    environment: ${TRANSBANK_ENVIRONMENT:TEST}
 ```
 
 El frontend (`App.jsx`) lee el query param `?payment=...` al cargar, muestra
 un banner (aprobado/rechazado/pendiente), y limpia la URL con
 `history.replaceState`.
-
-### 1.6 Cómo reemplazar la simulación por un proveedor real
-
-Ver la sección final [«Camino hacia un pago real»](#4-camino-hacia-un-pago-real-mercado-pago--transbank).
 
 ---
 
@@ -230,41 +249,35 @@ nivel de UI (solo `ROLE_ADMIN` ve la página).
         │           │          │          │             │              │
    auth-service  inventory- order-service payment-      shipment-   discovery-
    (8084)        service    (8082)        service        service     service
-                 (8081)     - órdenes      (8085)         (8083)      (8761, Eureka)
-                             - cupones     - checkout
-                                            - confirmación
+   - usuarios    (8081)     - órdenes      (8085)         (8083)      (8761, Eureka)
+   - roles                  - cupones     - checkout →
+                                            Transbank
+                                           - return/commit
 ```
 
 `payment-service` depende de `order-service` (vía Eureka/`RestTemplate`
 balanceado) para leer datos de la orden y para notificar el resultado del
-pago. No tiene su propia base de datos.
+pago, y de **Transbank** (servicio externo, HTTPS) para crear y confirmar la
+transacción real. No tiene su propia base de datos.
 
 ---
 
-## 4. Camino hacia un pago real (Mercado Pago / Transbank)
+## 4. Seguridad por rol (RBAC) sobre estos endpoints
 
-La arquitectura actual está pensada para que este cambio sea localizado:
-solo tocaría `payment-service`, no `order-service` ni el frontend.
+Todos los endpoints administrativos usados por la pasarela y los cupones
+están protegidos con `@PreAuthorize` a nivel de método (Spring Security),
+verificando la autoridad exacta que viene en el JWT:
 
-Pasos generales (ejemplo con **Transbank Webpay Plus**, que es el más común
-en proyectos académicos chilenos):
+- `POST/PUT/PATCH/DELETE /api/coupons/**` → `ROLE_ADMIN`.
+- `PUT /api/orders/{orderNumber}/payment-confirmation` → `ROLE_ADMIN`
+  (solo lo cumple el JWT de servicio que firma `payment-service`).
+- `PATCH /api/auth/users/{id}/role` y `.../status` → `ROLE_ADMIN`, con
+  bloqueo adicional para que un admin no se cambie el rol ni se suspenda a
+  sí mismo.
 
-1. Agregar el SDK del proveedor a `payment-service/pom.xml`.
-2. En vez de que `PaymentController.checkoutPage()` devuelva HTML propio,
-   `PaymentService` llamaría a la API del proveedor para **crear una
-   transacción real** (con el monto de la orden) y haría un `redirect` a la
-   URL de checkout que el proveedor entrega — el usuario paga en el sitio
-   real de Transbank/Mercado Pago, no en nuestro HTML.
-3. El proveedor redirige de vuelta a una URL de retorno propia (ej.
-   `/api/payments/{orderNumber}/webpay-return`) con un token de transacción.
-4. Ese endpoint llama al SDK para **confirmar/"commit"** la transacción,
-   obtiene el resultado real (aprobado/rechazado), y llama a
-   `orderClient.confirmPayment(orderNumber, approved)` — exactamente el
-   mismo método que ya existe hoy.
-5. Se necesitaría persistir el estado de la transacción del proveedor (hoy
-   `payment-service` no tiene base de datos); bastaría una tabla simple
-   `payment_transactions` (orderNumber, providerTransactionId, status).
-
-**Requisitos previos:** cuenta de comercio de prueba (ambas plataformas
-ofrecen sandbox gratis), y HTTPS para los callbacks en un despliegue real
-(en `localhost` funciona en modo sandbox/pruebas).
+Antes de esta corrección, el backend solo validaba que el JWT fuera válido
+(`authenticated()`), sin revisar el rol — cualquier usuario autenticado
+podía, por ejemplo, marcar su propia orden como pagada sin pasar por
+Transbank, llamando directamente al endpoint. El detalle completo de esta
+corrección está en el informe de arquitectura entregado junto con esta
+evaluación.
