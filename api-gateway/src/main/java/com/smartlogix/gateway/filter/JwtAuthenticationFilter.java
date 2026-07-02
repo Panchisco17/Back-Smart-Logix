@@ -36,11 +36,10 @@ public class JwtAuthenticationFilter implements GlobalFilter, Ordered {
             "/assets"
     );
 
-    // El checkout/confirmación de pago (payment-service) lo visita el navegador
-    // vía redirect directo (no un fetch de la SPA), por lo que no puede llevar
-    // el header Authorization.
+    // El checkout (navegador) y el retorno desde Transbank (/return, GET o POST
+    // según su versión de API) no llevan el JWT de usuario de la SPA.
     private static final Pattern PAYMENT_PATH_PATTERN =
-            Pattern.compile("^/api/payments/[^/]+/(checkout|confirm)$");
+            Pattern.compile("^/api/payments/[^/]+/(checkout|return)$");
 
     private final SecretKey signingKey;
 

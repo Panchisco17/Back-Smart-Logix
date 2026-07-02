@@ -16,6 +16,12 @@ public class GlobalExceptionHandler {
                 .body(new ErrorResponse(OffsetDateTime.now(), HttpStatus.BAD_GATEWAY.value(), ex.getMessage()));
     }
 
+    @ExceptionHandler(PaymentGatewayException.class)
+    public ResponseEntity<ErrorResponse> handlePaymentGatewayError(PaymentGatewayException ex) {
+        return ResponseEntity.status(HttpStatus.BAD_GATEWAY)
+                .body(new ErrorResponse(OffsetDateTime.now(), HttpStatus.BAD_GATEWAY.value(), ex.getMessage()));
+    }
+
     @ExceptionHandler(Exception.class)
     public ResponseEntity<ErrorResponse> handleUnknown(Exception ex) {
         return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)

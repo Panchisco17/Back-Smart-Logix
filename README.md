@@ -220,3 +220,10 @@ Se puede extender en Parcial 2/3 con:
 Se incluye una base de informe en:
 
 - `docs/INFORME-TECNICO.md`
+
+## Pasarela de pago y cupones
+
+Detalle de como funcionan la pasarela de pago simulada (`payment-service`) y
+el sistema de cupones de descuento administrables:
+
+- `docs/PAGOS-Y-CUPONES.md`

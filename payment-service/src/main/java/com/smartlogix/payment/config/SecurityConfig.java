@@ -29,7 +29,9 @@ public class SecurityConfig {
                         .requestMatchers(HttpMethod.OPTIONS, "/**").permitAll()
                         .requestMatchers(HttpMethod.GET, "/actuator/health", "/actuator/info").permitAll()
                         .requestMatchers(HttpMethod.GET, "/assets/**").permitAll()
-                        .requestMatchers(HttpMethod.GET, "/api/payments/*/checkout", "/api/payments/*/confirm").permitAll()
+                        .requestMatchers(HttpMethod.GET, "/api/payments/*/checkout").permitAll()
+                        .requestMatchers(HttpMethod.GET, "/api/payments/*/return").permitAll()
+                        .requestMatchers(HttpMethod.POST, "/api/payments/*/return").permitAll()
                         .anyRequest().denyAll()
                 )
                 .addFilterBefore(jwtAuthenticationFilter, UsernamePasswordAuthenticationFilter.class);

@@ -50,6 +50,11 @@
             <version>0.12.6</version>
             <scope>runtime</scope>
         </dependency>
+        <dependency>
+            <groupId>com.github.transbankdevelopers</groupId>
+            <artifactId>transbank-sdk-java</artifactId>
+            <version>6.2.1</version>
+        </dependency>
 
         <dependency>
             <groupId>org.springframework.boot</groupId>

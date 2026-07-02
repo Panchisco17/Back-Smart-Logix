@@ -33,10 +33,11 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
             "/assets"
     );
 
-    // La pasarela (checkout/confirm) la visita el navegador vía redirect directo
-    // desde order-service, por lo que no lleva un JWT de usuario.
+    // El checkout lo visita el navegador vía redirect directo, y el retorno
+    // (/return) lo llama Transbank (GET o POST según su versión de API) —
+    // ninguno de los dos lleva un JWT de usuario.
     private static final Pattern PAYMENT_PATH_PATTERN =
-            Pattern.compile("^/api/payments/[^/]+/(checkout|confirm)$");
+            Pattern.compile("^/api/payments/[^/]+/(checkout|return)$");
 
     private final SecretKey signingKey;
 

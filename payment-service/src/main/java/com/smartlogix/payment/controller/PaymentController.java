@@ -8,6 +8,7 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestMethod;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
@@ -23,14 +24,17 @@ public class PaymentController {
 
     @GetMapping(value = "/{orderNumber}/checkout", produces = MediaType.TEXT_HTML_VALUE)
     public String checkoutPage(@PathVariable String orderNumber) {
-        return paymentService.buildCheckoutPage(orderNumber);
+        return paymentService.buildCheckoutRedirect(orderNumber);
     }
 
-    @GetMapping("/{orderNumber}/confirm")
-    public ResponseEntity<Void> confirmPayment(
+    // Transbank redirige de vuelta aquí. Según la versión de su API puede ser
+    // GET o POST, y "token_ws" puede venir como query param o como body
+    // form-urlencoded, por eso se aceptan ambos métodos.
+    @RequestMapping(value = "/{orderNumber}/return", method = {RequestMethod.GET, RequestMethod.POST})
+    public ResponseEntity<Void> handleReturn(
             @PathVariable String orderNumber,
-            @RequestParam boolean approved) {
-        String redirectUrl = paymentService.confirmPayment(orderNumber, approved);
+            @RequestParam(value = "token_ws", required = false) String tokenWs) {
+        String redirectUrl = paymentService.confirmReturn(orderNumber, tokenWs);
         return ResponseEntity.status(HttpStatus.FOUND).location(URI.create(redirectUrl)).build();
     }
 }

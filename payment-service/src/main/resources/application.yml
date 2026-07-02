@@ -26,3 +26,13 @@ app:
     success-url: http://localhost:5173/?payment=success#/my-orders
     failure-url: http://localhost:5173/?payment=failed#/products
     pending-url: http://localhost:5173/?payment=pending#/my-orders
+
+# Credenciales publicas de integracion (sandbox) de Transbank, documentadas en
+# https://www.transbankdevelopers.cl - no son secretas, sirven para cualquier
+# comercio en ambiente de pruebas. En producción sobrescribir con las
+# variables de entorno usando las credenciales reales entregadas por Transbank.
+transbank:
+  webpay:
+    commerce-code: ${TRANSBANK_COMMERCE_CODE:597055555532}
+    api-key: ${TRANSBANK_API_KEY:579B532A7440BB0C9079DED94D31EA1615BACEB56610332264630D42D0A36B1C}
+    environment: ${TRANSBANK_ENVIRONMENT:TEST}
